@@ -8,16 +8,18 @@ from tornado.httputil import (
     RequestStartLine,
     ResponseStartLine,
 )
-from typing import Dict, Any, Callable, Awaitable, Optional, Union
+from typing import Callable, Awaitable, Optional, Union
 from urllib.parse import quote
 from tornado.concurrent import Future
+from asgiref.typing import (
+    Scope,
+    ASGIReceiveCallable,
+    ASGISendCallable,
+)
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-Scope = Dict[str, Any]
-Event = Dict[str, Any]
 
 
 class TornadoASGIAdapter:
@@ -27,8 +29,8 @@ class TornadoASGIAdapter:
     async def __call__(
         self,
         scope: Scope,
-        receive: Callable[[], Awaitable[Event]],
-        send: Callable[[Event], Awaitable[None]],
+        receive: ASGIReceiveCallable,
+        send: ASGISendCallable,
     ):
         if scope["type"] != "http":
             raise ValueError("Only HTTP connections are supported")
@@ -83,12 +85,14 @@ class ConnectionContext:
     protocol: str
 
 
+REMOVE_HEADERS = ["date", "server"]
+
 class ASGIHTTPConnection(HTTPConnection, Awaitable[None]):
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
         scope: Scope,
-        send: Callable[[Event], Awaitable[None]],
+        send: ASGISendCallable,
     ):
         self.loop = loop
         self.scope = scope
@@ -111,11 +115,17 @@ class ASGIHTTPConnection(HTTPConnection, Awaitable[None]):
     ) -> "Future[None]":
         assert isinstance(start_line, ResponseStartLine)
 
+        headers = [
+            (key.encode("ascii").lower(), value.encode("ascii"))
+            for key, value in headers.items()
+            if key.lower() not in REMOVE_HEADERS
+        ]
+
         events = [
             {
                 "type": "http.response.start",
                 "status": start_line.code,
-                "headers": [(key, value) for key, value in headers.items()],
+                "headers": headers,
             }
         ]
 

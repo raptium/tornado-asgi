@@ -1,14 +1,9 @@
 [project]
 name = "tornado-asgi"
 version = "0.1.0"
-description = "Add your description here"
-authors = [
-    { name = "Hao Guan", email = "hao.guan@ingka.ikea.com" }
-]
-dependencies = [
-    "tornado>=6.4.1",
-    "asgiref>=3.8.1",
-]
+description = "Simple ASGI adapter to allow running Tornado under ASGI"
+authors = [{ name = "Hao Guan", email = "gh@raptium.net" }]
+dependencies = ["tornado>=6.4.1", "asgiref>=3.8.1"]
 readme = "README.md"
 requires-python = ">= 3.8"
 
@@ -18,9 +13,7 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "uvicorn>=0.30.6",
-]
+dev-dependencies = ["uvicorn>=0.30.6"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
