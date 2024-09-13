@@ -11,11 +11,7 @@ from tornado.httputil import (
 from typing import Callable, Awaitable, Optional, Union
 from urllib.parse import quote
 from tornado.concurrent import Future
-from asgiref.typing import (
-    Scope,
-    ASGIReceiveCallable,
-    ASGISendCallable,
-)
+from asgiref.typing import Scope, ASGIReceiveCallable, ASGISendCallable, HTTPScope
 
 import logging
 
@@ -39,7 +35,7 @@ class TornadoASGIAdapter:
             "raw_path", quote(scope["path"], safe="/", encoding=None, errors=None)
         )
         if scope["query_string"]:
-            path += "?" + scope["query_string"]
+            path += b"?" + scope["query_string"]
 
         start_line = RequestStartLine(
             method=scope["method"],
@@ -64,17 +60,18 @@ class TornadoASGIAdapter:
 
         while True:
             event = await receive()
-            if event["type"] == "http.request":
-                body = event.get("body", b"")
-                if body:
-                    if aw := handler.data_received(body):
-                        await aw
-                if not event.get("more_body", False):
-                    handler.finish()
+            match event["type"]:
+                case "http.request":
+                    body = event.get("body", b"")
+                    if body:
+                        if aw := handler.data_received(body):
+                            await aw
+                    if not event.get("more_body", False):
+                        handler.finish()
+                        break
+                case "http.disconnect":
+                    connection.close()
                     break
-            elif event["type"] == "http.disconnect":
-                connection.close()
-                break
 
         await connection
 
@@ -87,18 +84,19 @@ class ConnectionContext:
 
 REMOVE_HEADERS = ["date", "server"]
 
+
 class ASGIHTTPConnection(HTTPConnection, Awaitable[None]):
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
-        scope: Scope,
+        scope: HTTPScope,
         send: ASGISendCallable,
     ):
         self.loop = loop
         self.scope = scope
         self.send = send
         self.context = ConnectionContext(
-            remote_ip=scope["client"][0],
+            remote_ip=scope.get("client", ("0.0.0.0", 0))[0],
             protocol=scope.get("scheme", "http"),
         )
         self._finish = loop.create_future()
@@ -159,7 +157,6 @@ class ASGIHTTPConnection(HTTPConnection, Awaitable[None]):
             self.send(
                 {
                     "type": "http.response.body",
-                    "body": b"",
                     "more_body": False,
                 }
             )
